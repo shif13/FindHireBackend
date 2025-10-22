@@ -191,6 +191,7 @@ const searchEquipment = async (req, res) => {
     let query = `
       SELECT 
         id,
+        user_id, 
         equipment_name as equipmentName,
         equipment_type as equipmentType,
         location,
@@ -377,6 +378,7 @@ const getEquipmentById = async (req, res) => {
     const query = `
       SELECT 
         id,
+        user_id,
         equipment_name as equipmentName,
         equipment_type as equipmentType,
         location,

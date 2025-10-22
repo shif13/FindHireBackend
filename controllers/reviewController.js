@@ -97,24 +97,24 @@ const getAllReviews = async (req, res) => {
     });
 
     const query = `
-      SELECT 
-        r.id,
-        r.userId,
-        r.rating,
-        r.title,
-        r.comment,
-        r.category,
-        r.createdAt,
-        r.updatedAt,
-        u.firstName,
-        u.lastName,
-        u.userType
-      FROM reviews r
-      JOIN users u ON r.userId = u.id
-      WHERE r.isApproved = true
-      ORDER BY r.createdAt DESC
-      LIMIT 100
-    `;
+  SELECT 
+    r.id,
+    r.userId,
+    r.rating,
+    r.title,
+    r.comment,
+    r.category,
+    r.createdAt,
+    r.updatedAt,
+    u.first_name as firstName,
+    u.last_name as lastName,
+    u.user_type as userType
+  FROM reviews r
+  JOIN users u ON r.userId = u.id
+  WHERE r.isApproved = true
+  ORDER BY r.createdAt DESC
+  LIMIT 100
+`;
 
     const [results] = await pool.query(query);
 

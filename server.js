@@ -20,6 +20,8 @@ const equipmentRoutes = require('./routes/equipmentRoutes');
 const manpowerSearchRoutes = require('./routes/manpowerSearchRoutes');
 const equipmentSearchRoutes = require('./routes/equipmentSearchRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
+const bothRoutes = require('./routes/bothRoutes');
+const inquiryRoutes = require('./routes/inquiryRoutes');
 
 const { createReviewsTable } = require("./controllers/reviewController");
 
@@ -49,7 +51,10 @@ app.use('/api/manpower', manpowerRoutes);
 app.use('/api/equipment', equipmentRoutes);
 app.use('/api/manpower-search', manpowerSearchRoutes);
 app.use('/api/equipment-search', equipmentSearchRoutes);
-app.use('/api/reviews', reviewRoutes); // ✅ Review routes added
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/both', bothRoutes);
+app.use('/api/inquiry', inquiryRoutes);
+
 
 // Initialize reviews table on startup
 createReviewsTable().catch(err => {

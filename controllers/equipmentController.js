@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const cloudinary = require('../config/cloudinary');
 const fs = require('fs');
 const { createUser, checkEmailExists } = require('./userController');
+const emailService = require('../services/emailService');
 
 // ==========================================
 // CREATE EQUIPMENT OWNER PROFILES TABLE
@@ -257,6 +258,20 @@ const createEquipmentOwnerAccount = async (req, res) => {
 
     console.log(`✅ Equipment owner account created: ${email} (User ID: ${userId})`);
 
+    // Send welcome email
+try {
+  await emailService.sendWelcomeEmail({
+    email,
+    firstName: name.split(' ')[0] || name,
+    lastName: name.split(' ').slice(1).join(' ') || '',
+    userType: 'equipment_owner'
+  });
+  console.log('✅ Welcome email sent to:', email);
+} catch (emailError) {
+  console.error('⚠️ Welcome email failed:', emailError.message);
+}
+
+    
     res.status(201).json({
       success: true,
       message: 'Equipment owner account created successfully',
@@ -687,11 +702,54 @@ const deleteEquipment = async (req, res) => {
   }
 };
 
+
+const getOwnerProfile = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const query = `
+      SELECT 
+        eop.name,
+        eop.email,
+        eop.mobile_number,
+        eop.whatsapp_number,
+        eop.location,
+        eop.company_name,
+        eop.profile_photo,
+        eop.equipment_count
+      FROM equipment_owner_profiles eop
+      WHERE eop.user_id = ?
+    `;
+    
+    const [results] = await db.query(query, [userId]);
+    
+    if (results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        msg: 'Owner profile not found'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: results[0]
+    });
+  } catch (error) {
+    console.error('Get owner profile error:', error);
+    res.status(500).json({
+      success: false,
+      msg: 'Error fetching owner profile',
+      error: error.message
+      });
+  }
+};
+
 module.exports = {
   createEquipmentOwnerAccount,
   getEquipmentOwnerProfile,
   updateEquipmentOwnerProfile,
   addEquipment,
   updateEquipment,
-  deleteEquipment
+  deleteEquipment,
+  getOwnerProfile
 };

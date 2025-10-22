@@ -9,7 +9,8 @@ const {
   updateEquipmentOwnerProfile,
   addEquipment,
   updateEquipment,
-  deleteEquipment
+  deleteEquipment,
+  getOwnerProfile
 } = require('../controllers/equipmentController');
 
 // ==========================================
@@ -18,6 +19,9 @@ const {
 
 // POST /api/equipment/signup - Equipment owner signup
 router.post('/signup', uploadFields, createEquipmentOwnerAccount);
+
+// GET /api/equipment-search/owner-profile/:userId - Get owner profile by user ID
+router.get('/owner-profile/:userId', getOwnerProfile);
 
 // ==========================================
 // PROTECTED ROUTES (Require Authentication)

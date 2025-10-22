@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const cloudinary = require('../config/cloudinary');
 const fs = require('fs');
 const { createUser, checkEmailExists } = require('./userController');
+const emailService = require('../services/emailService');
 
 // Create manpower_profiles table if it doesn't exist
 const createManpowerTable = async () => {
@@ -241,6 +242,19 @@ const createManpowerAccount = async (req, res) => {
     );
 
     console.log(`✅ Manpower account created: ${email} (User ID: ${userId})`);
+
+    // Send welcome email
+    try {
+  await emailService.sendWelcomeEmail({
+    email,
+    firstName,
+    lastName,
+    userType: 'manpower'
+  });
+  console.log('✅ Welcome email sent to:', email);
+} catch (emailError) {
+  console.error('⚠️ Welcome email failed:', emailError.message);
+}
 
     res.status(201).json({
       success: true,

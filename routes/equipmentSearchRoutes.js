@@ -1,4 +1,3 @@
-// routes/equipmentSearchRoutes.js
 const express = require('express');
 const router = express.Router();
 const {
@@ -8,20 +7,23 @@ const {
   getEquipmentById
 } = require('../controllers/equipmentSearchController');
 
-// ==========================================
-// PUBLIC ROUTES (No authentication required)
-// ==========================================
+// Import getOwnerProfile from equipmentController
+const { getOwnerProfile } = require('../controllers/equipmentController');
 
-// GET /api/equipment-search/search - Search and filter equipment
+// GET /api/equipment-search/search
 router.get('/search', searchEquipment);
 
-// GET /api/equipment-search/locations - Get all unique locations
+// GET /api/equipment-search/locations
 router.get('/locations', getLocations);
 
-// GET /api/equipment-search/stats - Get equipment statistics
+// GET /api/equipment-search/stats
 router.get('/stats', getEquipmentStats);
 
-// GET /api/equipment-search/:id - Get equipment by ID
+// GET /api/equipment-search/owner-profile/:userId - ADD THIS
+router.get('/owner-profile/:userId', getOwnerProfile);
+
+
+// GET /api/equipment-search/:id
 router.get('/:id', getEquipmentById);
 
 module.exports = router;

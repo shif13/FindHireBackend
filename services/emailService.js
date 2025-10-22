@@ -1,12 +1,12 @@
-// backend/services/emailService.js
+// services/emailService.js
 const nodemailer = require('nodemailer');
 
 // Create reusable transporter
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  service: process.env.EMAIL_SERVICE || 'gmail',
   auth: {
-    user: process.env.EMAIL_USER, // your-email@gmail.com
-    pass: process.env.EMAIL_PASSWORD // your app password from Google
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD
   }
 });
 
@@ -15,699 +15,565 @@ transporter.verify((error, success) => {
   if (error) {
     console.error('❌ Email service configuration error:', error);
   } else {
-    console.log('✅ Email service is ready to send emails');
+    console.log('✅ Email service is ready to send messages');
   }
 });
 
-// ==========================================
-// HELPER FUNCTION - Send Email
-// ==========================================
-const sendEmail = async (to, subject, html) => {
-  try {
-    const mailOptions = {
-      from: `"ProFetch" <${process.env.EMAIL_USER}>`,
-      to: to,
-      subject: subject,
-      html: html
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Email sent:', info.messageId);
-    
-    return {
-      success: true,
-      messageId: info.messageId
-    };
-  } catch (error) {
-    console.error('❌ Email send error:', error);
-    return {
-      success: false,
-      error: error.message
-    };
-  }
+// Base HTML template wrapper
+const getEmailTemplate = (title, content, footerText = '') => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          line-height: 1.6; 
+          color: #333;
+          background-color: #f5f5f5;
+        }
+        .container { 
+          max-width: 600px; 
+          margin: 0 auto; 
+          background-color: #ffffff;
+        }
+        .header { 
+          background: linear-gradient(135deg, #0d9488 0%, #06b6d4 100%);
+          color: white; 
+          padding: 40px 30px;
+          text-align: center;
+        }
+        .header h1 {
+          font-size: 28px;
+          font-weight: 700;
+          margin-bottom: 8px;
+        }
+        .header p {
+          color: rgba(255, 255, 255, 0.9);
+          font-size: 16px;
+        }
+        .content { 
+          padding: 40px 30px;
+          background-color: #ffffff;
+        }
+        .content h2 {
+          color: #0d9488;
+          margin-bottom: 20px;
+          font-size: 22px;
+        }
+        .content p {
+          margin-bottom: 16px;
+          color: #4b5563;
+          font-size: 15px;
+        }
+        .button { 
+          display: inline-block; 
+          padding: 14px 32px;
+          background-color: #0d9488;
+          color: white !important;
+          text-decoration: none;
+          border-radius: 8px;
+          margin: 24px 0;
+          font-weight: 600;
+          font-size: 16px;
+          transition: background-color 0.3s;
+        }
+        .button:hover {
+          background-color: #0f766e;
+        }
+        .info-box {
+          background-color: #f0fdfa;
+          border-left: 4px solid #0d9488;
+          padding: 16px;
+          margin: 20px 0;
+          border-radius: 4px;
+        }
+        .warning-box {
+          background-color: #fef3c7;
+          border-left: 4px solid #f59e0b;
+          padding: 16px;
+          margin: 20px 0;
+          border-radius: 4px;
+        }
+        .contact-card {
+          background-color: #f9fafb;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          padding: 20px;
+          margin: 20px 0;
+        }
+        .contact-card h3 {
+          color: #0d9488;
+          margin-bottom: 12px;
+          font-size: 18px;
+        }
+        .contact-item {
+          display: flex;
+          align-items: center;
+          margin: 8px 0;
+          color: #4b5563;
+        }
+        .contact-item strong {
+          min-width: 100px;
+          color: #1f2937;
+        }
+        .footer { 
+          text-align: center; 
+          color: #6b7280;
+          font-size: 13px;
+          padding: 30px;
+          background-color: #f9fafb;
+          border-top: 1px solid #e5e7eb;
+        }
+        .footer p {
+          margin: 8px 0;
+        }
+        .footer a {
+          color: #0d9488;
+          text-decoration: none;
+        }
+        .logo {
+          font-size: 24px;
+          font-weight: 700;
+          color: white;
+          margin-bottom: 4px;
+        }
+        .divider {
+          border-top: 1px solid #e5e7eb;
+          margin: 24px 0;
+        }
+        @media only screen and (max-width: 600px) {
+          .header, .content, .footer { padding: 24px 20px !important; }
+          .header h1 { font-size: 24px !important; }
+          .button { display: block; text-align: center; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">🔍 Find-Hire.Co</div>
+          <h1>${title}</h1>
+        </div>
+        <div class="content">
+          ${content}
+        </div>
+        <div class="footer">
+          <p><strong>Find-Hire.Co</strong> - The Industrial Hiring Hub</p>
+          <p>Connecting talent with opportunities</p>
+          ${footerText ? `<div class="divider"></div><p>${footerText}</p>` : ''}
+          <p style="margin-top: 16px;">
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}">Visit Website</a> • 
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/terms">Terms</a> • 
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/privacy">Privacy</a>
+          </p>
+          <p style="margin-top: 12px; color: #9ca3af;">
+            © ${new Date().getFullYear()} Find-Hire.Co. All rights reserved.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
 };
 
 // ==========================================
 // 1. WELCOME EMAIL (After Signup)
 // ==========================================
-const sendWelcomeEmail = async (user) => {
-  const subject = '🎉 Welcome to ProFetch!';
+const sendWelcomeEmail = async (userData) => {
+  const { email, firstName, lastName, userType } = userData;
   
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #0d9488 0%, #06b6d4 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-        .button { display: inline-block; background: #0d9488; color: white !important; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-        .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }
-        ul { padding-left: 20px; }
-        li { margin: 8px 0; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">Welcome to ProFetch! 🎉</h1>
-        </div>
-        <div class="content">
-          <h2>Hi ${user.firstName}!</h2>
-          <p>Thank you for joining ProFetch - your one-stop platform for freelance talent and equipment hire.</p>
-          
-          <p><strong>Your account has been created successfully!</strong></p>
-          
-          <p><strong>Next Steps:</strong></p>
-          <ol>
-            <li>Login to your account</li>
-            <li>Select your role (Freelancer, Equipment Owner, or Both)</li>
-            <li>Complete your profile</li>
-            <li>Start connecting with opportunities!</li>
-          </ol>
-          
-          <p><strong>Account Details:</strong></p>
-          <ul>
-            <li><strong>Username:</strong> ${user.userName}</li>
-            <li><strong>Email:</strong> ${user.email}</li>
-          </ul>
-          
-          <div style="text-align: center;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">Login to Your Account</a>
-          </div>
-          
-          <p>If you have any questions, feel free to reach out to our support team.</p>
-          
-          <p>Best regards,<br><strong>The ProFetch Team</strong></p>
-        </div>
-        <div class="footer">
-          <p>© ${new Date().getFullYear()} ProFetch. All rights reserved.</p>
-          <p>This email was sent to ${user.email}</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  const userTypeText = {
+    'manpower': 'Freelancer',
+    'equipment_owner': 'Equipment Owner',
+    'both': 'Freelancer & Equipment Owner'
+  };
 
-  return await sendEmail(user.email, subject, html);
-};
-
-// ==========================================
-// 2. ROLE SELECTION CONFIRMATION
-// ==========================================
-const sendRoleSelectionEmail = async (user) => {
-  let roleText = '';
-  let roleSteps = '';
-
-  if (user.isFreelancer && user.isEquipmentOwner) {
-    roleText = 'Both Freelancer and Equipment Owner';
-    roleSteps = `
-      <p><strong>As a Freelancer, you'll need to:</strong></p>
-      <ul>
-        <li>Add your job title and experience</li>
-        <li>Upload your CV/Resume</li>
-        <li>Add professional certificates</li>
-        <li>Set your availability</li>
-      </ul>
-      
-      <p><strong>As an Equipment Owner, you'll need to:</strong></p>
-      <ul>
-        <li>Add your equipment listings</li>
-        <li>Upload equipment photos</li>
-        <li>Set availability status</li>
-        <li>Add contact details</li>
-      </ul>
-    `;
-  } else if (user.isFreelancer) {
-    roleText = 'Freelancer';
-    roleSteps = `
-      <p><strong>As a Freelancer, you'll need to:</strong></p>
-      <ul>
-        <li>Add your job title and experience</li>
-        <li>Upload your CV/Resume</li>
-        <li>Add professional certificates</li>
-        <li>Set your availability</li>
-      </ul>
-    `;
-  } else if (user.isEquipmentOwner) {
-    roleText = 'Equipment Owner';
-    roleSteps = `
-      <p><strong>As an Equipment Owner, you'll need to:</strong></p>
-      <ul>
-        <li>Add your equipment listings</li>
-        <li>Upload equipment photos</li>
-        <li>Set availability status</li>
-        <li>Add contact details</li>
-      </ul>
-    `;
-  }
-
-  const subject = '✅ Role Selection Confirmed - Complete Your Profile';
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-        .button { display: inline-block; background: #7c3aed; color: white !important; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-        .role-badge { background: #ddd6fe; color: #5b21b6; padding: 8px 16px; border-radius: 20px; display: inline-block; font-weight: bold; }
-        ul { padding-left: 20px; }
-        li { margin: 8px 0; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">Role Selection Confirmed! ✅</h1>
-        </div>
-        <div class="content">
-          <h2>Great choice, ${user.firstName}!</h2>
-          
-          <p>Your role has been successfully set to:</p>
-          <div style="text-align: center; margin: 20px 0;">
-            <span class="role-badge">${roleText}</span>
-          </div>
-          
-          <p><strong>Next Step: Complete Your Profile</strong></p>
-          
-          ${roleSteps}
-          
-          <div style="text-align: center;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">Complete Your Profile</a>
-          </div>
-          
-          <p>Best regards,<br><strong>The ProFetch Team</strong></p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-
-  return await sendEmail(user.email, subject, html);
-};
-
-// ==========================================
-// 3. PROFILE COMPLETED (Freelancer)
-// ==========================================
-const sendProfileCompletedEmail = async (user) => {
-  const subject = '🎊 Profile Complete - You\'re All Set!';
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-        .button { display: inline-block; background: #059669; color: white !important; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-        .checkmark { font-size: 48px; color: #10b981; text-align: center; }
-        ul { padding-left: 20px; }
-        li { margin: 8px 0; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">Your Profile is Complete! 🎊</h1>
-        </div>
-        <div class="content">
-          <div class="checkmark">✓</div>
-          
-          <h2>Congratulations, ${user.firstName}!</h2>
-          
-          <p>Your professional profile has been successfully completed and is now live on ProFetch.</p>
-          
-          <p><strong>What you can do now:</strong></p>
-          <ul>
-            <li>Browse available opportunities</li>
-            <li>Connect with potential clients</li>
-            <li>Showcase your skills and experience</li>
-            <li>Get discovered by recruiters</li>
-          </ul>
-          
-          <div style="text-align: center;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">Go to Dashboard</a>
-          </div>
-          
-          <p><strong>Pro Tips:</strong></p>
-          <ul>
-            <li>Keep your profile updated</li>
-            <li>Upload quality certificates</li>
-            <li>Set accurate availability status</li>
-            <li>Respond promptly to inquiries</li>
-          </ul>
-          
-          <p>Best regards,<br><strong>The ProFetch Team</strong></p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-
-  return await sendEmail(user.email, subject, html);
-};
-
-// ==========================================
-// 3B. EQUIPMENT ADDED (First Equipment)
-// ==========================================
-const sendEquipmentAddedEmail = async (user, equipmentName) => {
-  const subject = '🎉 Equipment Added Successfully!';
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-        .button { display: inline-block; background: #7c3aed; color: white !important; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-        .equipment-box { background: white; padding: 20px; border-left: 4px solid #7c3aed; margin: 20px 0; border-radius: 5px; }
-        .checkmark { font-size: 48px; color: #a855f7; text-align: center; }
-        ul { padding-left: 20px; }
-        li { margin: 8px 0; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">Equipment Added Successfully! 🎉</h1>
-        </div>
-        <div class="content">
-          <div class="checkmark">✓</div>
-          
-          <h2>Great job, ${user.firstName}!</h2>
-          
-          <p>Your equipment has been successfully added and is now live on ProFetch.</p>
-          
-          <div class="equipment-box">
-            <p><strong>Equipment Added:</strong> ${equipmentName}</p>
-            <p style="color: #059669; font-weight: bold;">✓ Now visible to potential clients</p>
-          </div>
-          
-          <p><strong>What happens next:</strong></p>
-          <ul>
-            <li>Your equipment is now searchable on the platform</li>
-            <li>Clients can view details and contact you</li>
-            <li>You'll receive email notifications for inquiries</li>
-            <li>You can manage availability from your dashboard</li>
-          </ul>
-          
-          <div style="text-align: center;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">Manage Your Equipment</a>
-          </div>
-          
-          <p><strong>Pro Tips for Equipment Owners:</strong></p>
-          <ul>
-            <li>Upload clear, high-quality photos</li>
-            <li>Keep availability status updated</li>
-            <li>Add detailed descriptions</li>
-            <li>Respond quickly to inquiries</li>
-            <li>Update location and contact info regularly</li>
-          </ul>
-          
-          <p>Best regards,<br><strong>The ProFetch Team</strong></p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-
-  return await sendEmail(user.email, subject, html);
-};
-
-// ==========================================
-// 4. EQUIPMENT INQUIRY (to Equipment Owner)
-// ==========================================
-const sendEquipmentInquiryEmail = async (equipmentData, inquiryData) => {
-  const subject = `📧 New Inquiry: ${equipmentData.name}`;
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-        .inquiry-box { background: white; padding: 20px; border-left: 4px solid #7c3aed; margin: 20px 0; }
-        .button { display: inline-block; background: #7c3aed; color: white !important; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 10px 5px; }
-        hr { border: none; border-top: 1px solid #e5e7eb; margin: 20px 0; }
-        ul { padding-left: 20px; }
-        li { margin: 8px 0; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">New Equipment Inquiry! 📧</h1>
-        </div>
-        <div class="content">
-          <h2>Hi ${equipmentData.owner}!</h2>
-          
-          <p>You have received a new inquiry for your equipment:</p>
-          
-          <div class="inquiry-box">
-            <p><strong>Equipment:</strong> ${equipmentData.name}</p>
-            <p><strong>Location:</strong> ${equipmentData.location}</p>
-            
-            <hr>
-            
-            <p><strong>From:</strong> ${inquiryData.name}</p>
-            <p><strong>Email:</strong> ${inquiryData.email}</p>
-            ${inquiryData.phone ? `<p><strong>Phone:</strong> ${inquiryData.phone}</p>` : ''}
-            
-            <hr>
-            
-            <p><strong>Message:</strong></p>
-            <p style="background: #f3f4f6; padding: 15px; border-radius: 5px;">${inquiryData.message}</p>
-          </div>
-          
-          <p><strong>Next Steps:</strong></p>
-          <ul>
-            <li>Reply to ${inquiryData.email} directly</li>
-            ${inquiryData.phone ? `<li>Or call ${inquiryData.phone} for immediate response</li>` : ''}
-          </ul>
-          
-          <div style="text-align: center;">
-            <a href="mailto:${inquiryData.email}" class="button">Reply via Email</a>
-            ${inquiryData.phone ? `<a href="tel:${inquiryData.phone}" class="button" style="background: #059669;">Call Now</a>` : ''}
-          </div>
-          
-          <p>Best regards,<br><strong>The ProFetch Team</strong></p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-
-  return await sendEmail(equipmentData.ownerEmail, subject, html);
-};
-
-// ==========================================
-// 5. INQUIRY CONFIRMATION (to Inquirer)
-// ==========================================
-const sendInquiryConfirmationEmail = async (equipmentData, inquiryData) => {
-  const subject = '✅ Your Inquiry Has Been Sent';
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-        ul { padding-left: 20px; }
-        li { margin: 8px 0; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">Inquiry Sent Successfully! ✅</h1>
-        </div>
-        <div class="content">
-          <h2>Hi ${inquiryData.name}!</h2>
-          
-          <p>Your inquiry for <strong>${equipmentData.name}</strong> has been successfully sent to the equipment owner.</p>
-          
-          <p><strong>What happens next?</strong></p>
-          <ul>
-            <li>The equipment owner will receive your inquiry</li>
-            <li>They will contact you at ${inquiryData.email}</li>
-            <li>You should expect a response within 24-48 hours</li>
-          </ul>
-          
-          <p><strong>Your Inquiry Details:</strong></p>
-          <ul>
-            <li><strong>Equipment:</strong> ${equipmentData.name}</li>
-            <li><strong>Owner:</strong> ${equipmentData.owner}</li>
-            <li><strong>Location:</strong> ${equipmentData.location}</li>
-          </ul>
-          
-          <p>If you don't hear back within 48 hours, please feel free to contact our support team.</p>
-          
-          <p>Best regards,<br><strong>The ProFetch Team</strong></p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-
-  return await sendEmail(inquiryData.email, subject, html);
-};
-
-// ==========================================
-// 6. PROFILE UPDATE CONFIRMATION
-// ==========================================
-const sendProfileUpdateEmail = async (user) => {
-  const subject = '✅ Profile Updated Successfully';
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #0d9488 0%, #06b6d4 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">Profile Updated! ✅</h1>
-        </div>
-        <div class="content">
-          <h2>Hi ${user.firstName}!</h2>
-          
-          <p>Your profile has been successfully updated.</p>
-          
-          <p>Your changes are now live and visible to potential clients and recruiters on the platform.</p>
-          
-          <p><strong>Security Note:</strong> If you didn't make these changes, please contact us immediately at ${process.env.EMAIL_USER}</p>
-          
-          <p>Best regards,<br><strong>The ProFetch Team</strong></p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-
-  return await sendEmail(user.email, subject, html);
-};
-
-// ==========================================
-// 7. PASSWORD RESET EMAIL
-// ==========================================
-const sendPasswordResetEmail = async (user, resetToken) => {
-  const subject = '🔒 Password Reset Request - ProFetch';
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-        .token-box { background: #fef2f2; border: 2px solid #ef4444; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px; }
-        .token { font-size: 32px; font-weight: bold; color: #dc2626; letter-spacing: 5px; font-family: monospace; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">🔒 Password Reset Request</h1>
-        </div>
-        <div class="content">
-          <h2>Hi ${user.firstName}!</h2>
-          
-          <p>We received a request to reset your ProFetch account password.</p>
-          
-          <p><strong>Your 6-digit reset code is:</strong></p>
-          
-          <div class="token-box">
-            <div class="token">${resetToken}</div>
-          </div>
-          
-          <p><strong>This code will expire in 1 hour.</strong></p>
-          
-          <p>To reset your password:</p>
-          <ol>
-            <li>Enter this code on the password reset page</li>
-            <li>Create your new password</li>
-            <li>Confirm the change</li>
-          </ol>
-          
-          <p><strong>Security Note:</strong> If you didn't request this password reset, please ignore this email or contact us immediately at ${process.env.EMAIL_USER}</p>
-          
-          <p>Best regards,<br><strong>The ProFetch Team</strong></p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-
-  return await sendEmail(user.email, subject, html);
-};
-
-// ==========================================
-// 8. PASSWORD CHANGE CONFIRMATION
-// ==========================================
-const sendPasswordChangeConfirmation = async (user) => {
-  const subject = '✅ Password Changed Successfully';
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-        .button { display: inline-block; background: #059669; color: white !important; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">Password Changed! ✅</h1>
-        </div>
-        <div class="content">
-          <h2>Hi ${user.firstName}!</h2>
-          
-          <p>Your ProFetch account password has been successfully changed.</p>
-          
-          <p>You can now login with your new password.</p>
-          
-          <div style="text-align: center;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">Login to Your Account</a>
-          </div>
-          
-          <p><strong>Security Alert:</strong> If you didn't make this change, please contact us immediately at ${process.env.EMAIL_USER}</p>
-          
-          <p>Best regards,<br><strong>The ProFetch Team</strong></p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-
-  return await sendEmail(user.email, subject, html);
-};
-
-// ==========================================
-// VERIFY EMAIL CONFIGURATION
-// ==========================================
-const verifyEmailConfig = async () => {
-  try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-      console.warn('⚠️  Email credentials not configured in .env file');
-      console.warn('   Required: EMAIL_USER and EMAIL_PASSWORD');
-      return false;
-    }
+  const content = `
+    <h2>Welcome to Find-Hire.Co! 🎉</h2>
+    <p>Hi <strong>${firstName} ${lastName}</strong>,</p>
+    <p>Thank you for joining <strong>Find-Hire.Co</strong> as a <strong>${userTypeText[userType]}</strong>! We're excited to have you as part of our community.</p>
     
-    await transporter.verify();
-    console.log('✅ Email configuration verified successfully');
-    return true;
+    <div class="info-box">
+      <p style="margin: 0;"><strong>🎯 Your account type:</strong> ${userTypeText[userType]}</p>
+    </div>
+
+    <h3 style="color: #0d9488; margin-top: 28px; margin-bottom: 12px;">What's Next?</h3>
+    ${userType === 'manpower' || userType === 'both' ? `
+      <p><strong>📋 Complete Your Profile:</strong> Add your skills, experience, and upload your CV to stand out to employers.</p>
+    ` : ''}
+    ${userType === 'equipment_owner' || userType === 'both' ? `
+      <p><strong>🏗️ List Your Equipment:</strong> Start adding your equipment to reach potential clients.</p>
+    ` : ''}
+    ${userType === 'manpower' ? `
+      <p><strong>🔍 Browse Opportunities:</strong> Explore job listings and connect with employers looking for your skills.</p>
+    ` : ''}
+    ${userType === 'equipment_owner' ? `
+      <p><strong>💼 Manage Listings:</strong> Keep your equipment availability updated to get more inquiries.</p>
+    ` : ''}
+
+    <div style="text-align: center;">
+      <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">
+        Go to Dashboard →
+      </a>
+    </div>
+
+    <p>If you have any questions or need assistance, feel free to reach out to our support team.</p>
+    <p>Best regards,<br><strong>The Find-Hire Team</strong></p>
+  `;
+
+  const mailOptions = {
+    from: `"Find-Hire.Co" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: '🎉 Welcome to Find-Hire.Co!',
+    html: getEmailTemplate('Welcome Aboard!', content, 'This is an automated message. Please do not reply to this email.')
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Welcome email sent to ${email}`);
+    return { success: true };
   } catch (error) {
-    console.error('❌ Email verification failed:', error.message);
-    console.warn('⚠️  Email features will be disabled');
-    return false;
+    console.error('❌ Welcome email error:', error);
+    return { success: false, error: error.message };
   }
 };
 
 // ==========================================
-// 9. CONTACT EMAIL (to Candidate from Recruiter)
+// 2. PASSWORD RESET TOKEN EMAIL
 // ==========================================
-const sendContactEmail = async (candidate, emailData) => {
-  const subject = emailData.subject || 'New Message from Recruiter';
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #0d9488 0%, #06b6d4 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-        .message-box { background: white; padding: 20px; border-left: 4px solid #0d9488; margin: 20px 0; border-radius: 5px; }
-        .button { display: inline-block; background: #0d9488; color: white !important; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-        hr { border: none; border-top: 1px solid #e5e7eb; margin: 20px 0; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">💼 New Message from Recruiter</h1>
-        </div>
-        <div class="content">
-          <h2>Hi ${candidate.firstName}!</h2>
-          
-          <p>You have received a new message from a recruiter on TalentConnect.</p>
-          
-          <div class="message-box">
-            <p><strong>From:</strong> ${emailData.senderInfo.name}</p>
-            <p><strong>Subject:</strong> ${emailData.subject}</p>
-            
-            <hr>
-            
-            <p><strong>Message:</strong></p>
-            <p style="white-space: pre-wrap;">${emailData.message}</p>
-          </div>
-          
-          <p><strong>Next Steps:</strong></p>
-          <ul>
-            <li>Review the message and opportunity details</li>
-            <li>Log in to your dashboard to view and respond</li>
-            <li>You can reply directly to ${emailData.senderInfo.email}</li>
-          </ul>
-          
-          <div style="text-align: center;">
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">View in Dashboard</a>
-          </div>
-          
-          <p><strong>Pro Tip:</strong> Responding quickly to recruiter messages increases your chances of landing opportunities!</p>
-          
-          <p>Best regards,<br><strong>The TalentConnect Team</strong></p>
-        </div>
-      </div>
-    </body>
-    </html>
+const sendPasswordResetEmail = async (userData, resetToken) => {
+  const { email, firstName, lastName } = userData;
+  const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?token=${resetToken}`;
+
+  const content = `
+    <h2>Password Reset Request</h2>
+    <p>Hi <strong>${firstName} ${lastName}</strong>,</p>
+    <p>We received a request to reset your password for your Find-Hire.Co account.</p>
+    
+    <p>Click the button below to reset your password:</p>
+
+    <div style="text-align: center;">
+      <a href="${resetUrl}" class="button">
+        Reset Password
+      </a>
+    </div>
+
+    <div class="warning-box">
+      <p style="margin: 0;"><strong>⏰ Important:</strong> This link will expire in <strong>1 hour</strong>.</p>
+    </div>
+
+    <p>Or copy and paste this link into your browser:</p>
+    <div class="info-box">
+      <p style="margin: 0; word-break: break-all; font-size: 13px;">${resetUrl}</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <p><strong>🔒 Security Notice:</strong></p>
+    <p>If you didn't request a password reset, please ignore this email or contact our support team if you have concerns about your account security.</p>
+    
+    <p>Your password will remain unchanged until you create a new one using the link above.</p>
+
+    <p>Best regards,<br><strong>The Find-Hire Security Team</strong></p>
   `;
 
-  return await sendEmail(candidate.email, subject, html);
+  const mailOptions = {
+    from: `"Find-Hire.Co Security" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: '🔐 Password Reset Request - Find-Hire.Co',
+    html: getEmailTemplate('Reset Your Password', content, 'This is an automated security message.')
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Password reset email sent to ${email}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Password reset email error:', error);
+    return { success: false, error: error.message };
+  }
 };
 
 // ==========================================
-// EXPORTS
+// 3. PASSWORD CHANGE CONFIRMATION EMAIL
+// ==========================================
+const sendPasswordChangedEmail = async (userData) => {
+  const { email, firstName, lastName } = userData;
+
+  const content = `
+    <h2>Password Changed Successfully ✅</h2>
+    <p>Hi <strong>${firstName} ${lastName}</strong>,</p>
+    <p>This email confirms that your password has been successfully changed.</p>
+
+    <div class="info-box">
+      <p style="margin: 0;">
+        <strong>🕐 Changed on:</strong> ${new Date().toLocaleString('en-US', { 
+          dateStyle: 'full', 
+          timeStyle: 'short' 
+        })}
+      </p>
+    </div>
+
+    <p>You can now log in to your account using your new password.</p>
+
+    <div style="text-align: center;">
+      <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">
+        Log In to Your Account
+      </a>
+    </div>
+
+    <div class="warning-box">
+      <p style="margin: 0;"><strong>⚠️ Didn't make this change?</strong></p>
+      <p style="margin: 8px 0 0 0;">If you didn't change your password, please contact our support team immediately to secure your account.</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <p><strong>🛡️ Security Tips:</strong></p>
+    <ul style="color: #4b5563; margin: 12px 0; padding-left: 20px;">
+      <li>Never share your password with anyone</li>
+      <li>Use a unique password for Find-Hire.Co</li>
+      <li>Enable two-factor authentication when available</li>
+      <li>Log out from shared devices</li>
+    </ul>
+
+    <p>Best regards,<br><strong>The Find-Hire Security Team</strong></p>
+  `;
+
+  const mailOptions = {
+    from: `"Find-Hire.Co Security" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: '✅ Your Password Was Changed - Find-Hire.Co',
+    html: getEmailTemplate('Password Changed', content, 'This is an automated security notification.')
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Password changed confirmation sent to ${email}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Password changed email error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ==========================================
+// 4. INQUIRY EMAIL TO MANPOWER (Someone wants to contact)
+// ==========================================
+const sendManpowerInquiryEmail = async (manpowerData, inquirerData) => {
+  const { email, firstName, lastName, jobTitle } = manpowerData;
+  const { name, email: inquirerEmail, phone, message, subject } = inquirerData;
+
+  const content = `
+    <h2>New Inquiry About Your Profile! 💼</h2>
+    <p>Hi <strong>${firstName} ${lastName}</strong>,</p>
+    <p>Good news! Someone is interested in your ${jobTitle} services on Find-Hire.Co.</p>
+
+    <div class="contact-card">
+      <h3>📧 Inquiry Details</h3>
+      ${subject ? `<div class="contact-item"><strong>Subject:</strong> ${subject}</div>` : ''}
+      <div class="contact-item"><strong>From:</strong> ${name}</div>
+      <div class="contact-item"><strong>Email:</strong> <a href="mailto:${inquirerEmail}">${inquirerEmail}</a></div>
+      ${phone ? `<div class="contact-item"><strong>Phone:</strong> <a href="tel:${phone}">${phone}</a></div>` : ''}
+    </div>
+
+    ${message ? `
+      <div class="info-box">
+        <p style="margin: 0;"><strong>📝 Message:</strong></p>
+        <p style="margin: 8px 0 0 0; white-space: pre-wrap;">${message}</p>
+      </div>
+    ` : ''}
+
+    <p><strong>What to do next:</strong></p>
+    <ol style="color: #4b5563; margin: 12px 0; padding-left: 20px;">
+      <li>Review the inquiry details above</li>
+      <li>Respond promptly to show professionalism</li>
+      <li>Use the contact information provided to get in touch</li>
+    </ol>
+
+    <div style="text-align: center;">
+      <a href="mailto:${inquirerEmail}?subject=Re: ${encodeURIComponent(subject || 'Your inquiry on Find-Hire.Co')}" class="button">
+        Reply via Email →
+      </a>
+    </div>
+
+    <div class="divider"></div>
+
+    <p><strong>💡 Quick Tip:</strong> Fast responses lead to better connections! Try to reply within 24 hours.</p>
+
+    <p>Best regards,<br><strong>The Find-Hire Team</strong></p>
+  `;
+
+  const mailOptions = {
+    from: `"Find-Hire.Co Opportunities" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: `🔔 New Inquiry: ${name} is interested in your ${jobTitle} services`,
+    html: getEmailTemplate('New Opportunity!', content, 'You can reply directly to the inquirer using their email address above.'),
+    replyTo: inquirerEmail
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Inquiry notification sent to manpower: ${email}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Manpower inquiry email error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ==========================================
+// 5. INQUIRY EMAIL TO EQUIPMENT OWNER
+// ==========================================
+const sendEquipmentInquiryEmail = async (ownerData, equipmentData, inquirerData) => {
+  const { email, name: ownerName, companyName } = ownerData;
+  const { equipmentName, equipmentType } = equipmentData;
+  const { name, email: inquirerEmail, phone, message, subject } = inquirerData;
+
+  const content = `
+    <h2>New Equipment Inquiry! 🏗️</h2>
+    <p>Hi <strong>${ownerName}</strong>${companyName ? ` from <strong>${companyName}</strong>` : ''},</p>
+    <p>Great news! Someone is interested in your equipment listing on Find-Hire.Co.</p>
+
+    <div class="info-box">
+      <p style="margin: 0;">
+        <strong>🔧 Equipment:</strong> ${equipmentName}${equipmentType ? ` (${equipmentType})` : ''}
+      </p>
+    </div>
+
+    <div class="contact-card">
+      <h3>👤 Inquirer Information</h3>
+      ${subject ? `<div class="contact-item"><strong>Subject:</strong> ${subject}</div>` : ''}
+      <div class="contact-item"><strong>Name:</strong> ${name}</div>
+      <div class="contact-item"><strong>Email:</strong> <a href="mailto:${inquirerEmail}">${inquirerEmail}</a></div>
+      ${phone ? `<div class="contact-item"><strong>Phone:</strong> <a href="tel:${phone}">${phone}</a></div>` : ''}
+    </div>
+
+    ${message ? `
+      <div class="info-box">
+        <p style="margin: 0;"><strong>📝 Message from ${name}:</strong></p>
+        <p style="margin: 8px 0 0 0; white-space: pre-wrap;">${message}</p>
+      </div>
+    ` : ''}
+
+    <p><strong>Next Steps:</strong></p>
+    <ol style="color: #4b5563; margin: 12px 0; padding-left: 20px;">
+      <li>Review the inquiry and check equipment availability</li>
+      <li>Contact the inquirer to discuss rental terms</li>
+      <li>Provide pricing and availability details</li>
+      <li>Close the deal!</li>
+    </ol>
+
+    <div style="text-align: center;">
+      <a href="mailto:${inquirerEmail}?subject=Re: ${encodeURIComponent(subject || `Inquiry about ${equipmentName}`)}" class="button">
+        Reply via Email →
+      </a>
+    </div>
+
+    <div class="divider"></div>
+
+    <p><strong>💼 Pro Tip:</strong> Quick responses increase your chances of securing rentals. Try to reply within 24 hours for best results!</p>
+
+    <p>Best regards,<br><strong>The Find-Hire Team</strong></p>
+  `;
+
+  const mailOptions = {
+    from: `"Find-Hire.Co Rentals" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: `🔔 New Rental Inquiry: ${equipmentName} - ${name}`,
+    html: getEmailTemplate('New Rental Inquiry!', content, 'You can reply directly to the inquirer using their email address above.'),
+    replyTo: inquirerEmail
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Equipment inquiry notification sent to owner: ${email}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Equipment inquiry email error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ==========================================
+// 6. INQUIRY CONFIRMATION TO SENDER
+// ==========================================
+const sendInquiryConfirmationEmail = async (inquirerData, targetData, type = 'manpower') => {
+  const { email, name } = inquirerData;
+  const { firstName, lastName, jobTitle, equipmentName, ownerName } = targetData;
+
+  const targetName = type === 'manpower' 
+    ? `${firstName} ${lastName}` 
+    : ownerName || 'the equipment owner';
+  
+  const regarding = type === 'manpower'
+    ? `${firstName} ${lastName}'s ${jobTitle} services`
+    : `${equipmentName}`;
+
+  const content = `
+    <h2>Inquiry Sent Successfully! ✅</h2>
+    <p>Hi <strong>${name}</strong>,</p>
+    <p>Thank you for using Find-Hire.Co! Your inquiry has been successfully sent to <strong>${targetName}</strong>.</p>
+
+    <div class="info-box">
+      <p style="margin: 0;">
+        <strong>📋 Regarding:</strong> ${regarding}
+      </p>
+    </div>
+
+    <p><strong>What happens next?</strong></p>
+    <ol style="color: #4b5563; margin: 12px 0; padding-left: 20px;">
+      <li>${targetName} will receive your inquiry via email</li>
+      <li>They will review your message and contact details</li>
+      <li>You should hear back within 24-48 hours</li>
+      <li>Check your email and phone for their response</li>
+    </ol>
+
+    <div class="warning-box">
+      <p style="margin: 0;"><strong>⏰ Response Time:</strong> Most users respond within 24-48 hours. If you don't hear back, you can reach out again or explore other listings.</p>
+    </div>
+
+    <div style="text-align: center;">
+      <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/${type === 'manpower' ? 'manpower-finder' : 'equipment'}" class="button">
+        Browse More Listings →
+      </a>
+    </div>
+
+    <p>Good luck with your ${type === 'manpower' ? 'hiring' : 'rental'} search!</p>
+
+    <p>Best regards,<br><strong>The Find-Hire Team</strong></p>
+  `;
+
+  const mailOptions = {
+    from: `"Find-Hire.Co" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: `✅ Your inquiry was sent to ${targetName}`,
+    html: getEmailTemplate('Inquiry Sent!', content, 'This is an automated confirmation.')
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Inquiry confirmation sent to ${email}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Inquiry confirmation email error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ==========================================
+// EXPORT ALL FUNCTIONS
 // ==========================================
 module.exports = {
   sendWelcomeEmail,
-  sendRoleSelectionEmail,
-  sendProfileCompletedEmail,
+  sendPasswordResetEmail,
+  sendPasswordChangedEmail,
+  sendManpowerInquiryEmail,
   sendEquipmentInquiryEmail,
   sendInquiryConfirmationEmail,
-  sendProfileUpdateEmail,
-  sendPasswordResetEmail,
-  sendPasswordChangeConfirmation,
-  verifyEmailConfig,
-  sendEquipmentAddedEmail,
-  sendContactEmail
+  transporter 
 };
