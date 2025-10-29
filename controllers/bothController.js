@@ -25,6 +25,34 @@ const uploadToCloudinary = async (filePath) => {
   }
 };
 
+// Helper function to delete from Cloudinary
+const deleteFromCloudinary = async (imageUrl) => {
+  try {
+    if (!imageUrl) return;
+    
+    const matches = imageUrl.match(/\/both_profiles\/([^\.]+)/);
+    if (matches && matches[1]) {
+      const publicId = `both_profiles/${matches[1]}`;
+      await cloudinary.uploader.destroy(publicId);
+      console.log('🗑️ Deleted image from Cloudinary:', publicId);
+    }
+  } catch (error) {
+    console.error('Error deleting from Cloudinary:', error);
+  }
+};
+
+// Helper function to delete local files
+const deleteLocalFile = (filePath) => {
+  try {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log('🗑️ Deleted local file:', filePath);
+    }
+  } catch (error) {
+    console.error('Error deleting local file:', error);
+  }
+};
+
 // ==========================================
 // CREATE "BOTH" ACCOUNT (SIGNUP)
 // ==========================================
@@ -174,7 +202,7 @@ const createBothAccount = async (req, res) => {
         mobileNumber,
         finalWhatsappNumber,
         location,
-        jobTitle || null, // NULL if not provided
+        jobTitle || null,
         availabilityStatus || 'available',
         availableFrom || null,
         rate || null,
@@ -199,7 +227,7 @@ const createBothAccount = async (req, res) => {
         mobileNumber,
         finalWhatsappNumber,
         location,
-        companyName || null, // NULL if not provided
+        companyName || null,
         profilePhotoUrl
       ]
     );
@@ -208,25 +236,25 @@ const createBothAccount = async (req, res) => {
     console.log(`🎉 Both account created: ${email} (User ID: ${userId})`);
 
     // Send welcome email
-try {
-  await emailService.sendWelcomeEmail({
-    email,
-    firstName,
-    lastName,
-    userType: 'both'
-  });
-  console.log('✅ Welcome email sent to:', email);
-} catch (emailError) {
-  console.error('⚠️ Welcome email failed:', emailError.message);
-}
+    try {
+      await emailService.sendWelcomeEmail({
+        email,
+        firstName,
+        lastName,
+        userType: 'both'
+      });
+      console.log('✅ Welcome email sent to:', email);
+    } catch (emailError) {
+      console.error('⚠️ Welcome email failed:', emailError.message);
+    }
 
     res.status(201).json({
       success: true,
       message: 'Account created successfully with both profiles',
       userId: userId,
       profiles: {
-        manpower: true, // Always created
-        equipment: true  // Always created
+        manpower: true,
+        equipment: true
       }
     });
 
@@ -319,24 +347,148 @@ const getBothProfiles = async (req, res) => {
 };
 
 // ==========================================
-// UPDATE MANPOWER PROFILE (from dashboard)
+// UPDATE BASIC INFO (Updates all 3 tables)
+// ==========================================
+const updateBasicInfo = async (req, res) => {
+  const userId = req.user.userId;
+
+  try {
+    console.log('📝 Updating basic info for user:', userId);
+    console.log('📦 Body:', req.body);
+    console.log('📎 Files:', req.files);
+
+    const {
+      firstName,
+      lastName,
+      phone,
+      whatsapp,
+      location
+    } = req.body;
+
+    // Get current profiles
+    const [currentManpower] = await db.query(
+      'SELECT * FROM manpower_profiles WHERE user_id = ?',
+      [userId]
+    );
+
+    const [currentEquipment] = await db.query(
+      'SELECT * FROM equipment_owner_profiles WHERE user_id = ?',
+      [userId]
+    );
+
+    if (currentManpower.length === 0 || currentEquipment.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profile not found'
+      });
+    }
+
+    const manpower = currentManpower[0];
+    const equipment = currentEquipment[0];
+
+    // Handle profile photo update
+    let profilePhotoUrl = manpower.profile_photo;
+    if (req.files && req.files.profilePhoto && req.files.profilePhoto[0]) {
+      try {
+        console.log('📸 Uploading new profile photo...');
+        
+        // Delete old photo from Cloudinary if exists
+        if (manpower.profile_photo) {
+          await deleteFromCloudinary(manpower.profile_photo);
+        }
+        
+        profilePhotoUrl = await uploadToCloudinary(req.files.profilePhoto[0].path);
+        console.log('✅ New profile photo uploaded:', profilePhotoUrl);
+      } catch (error) {
+        console.error('❌ Error updating profile photo:', error);
+      }
+    }
+
+    const fullName = `${firstName || manpower.first_name} ${lastName || manpower.last_name}`.trim();
+
+    // Update users table
+    await db.query(
+      `UPDATE users 
+       SET first_name = ?, last_name = ?, mobile_number = ?,
+           whatsapp_number = ?, location = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [
+        firstName || manpower.first_name,
+        lastName || manpower.last_name,
+        phone || manpower.mobile_number,
+        whatsapp || manpower.whatsapp_number,
+        location || manpower.location,
+        userId
+      ]
+    );
+
+    // Update manpower_profiles
+    await db.query(
+      `UPDATE manpower_profiles 
+       SET first_name = ?, last_name = ?, mobile_number = ?,
+           whatsapp_number = ?, location = ?, profile_photo = ?,
+           updated_at = NOW()
+       WHERE user_id = ?`,
+      [
+        firstName || manpower.first_name,
+        lastName || manpower.last_name,
+        phone || manpower.mobile_number,
+        whatsapp || manpower.whatsapp_number,
+        location || manpower.location,
+        profilePhotoUrl,
+        userId
+      ]
+    );
+
+    // Update equipment_owner_profiles
+    await db.query(
+      `UPDATE equipment_owner_profiles 
+       SET name = ?, mobile_number = ?, whatsapp_number = ?, 
+           location = ?, profile_photo = ?, updated_at = NOW()
+       WHERE user_id = ?`,
+      [
+        fullName,
+        phone || equipment.mobile_number,
+        whatsapp || equipment.whatsapp_number,
+        location || equipment.location,
+        profilePhotoUrl,
+        userId
+      ]
+    );
+
+    console.log('✅ Basic info updated in all 3 tables');
+
+    res.status(200).json({
+      success: true,
+      message: 'Basic info updated successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Update basic info error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating basic info',
+      error: error.message
+    });
+  }
+};
+
+// ==========================================
+// UPDATE MANPOWER PROFILE (Only manpower_profiles table)
 // ==========================================
 const updateManpowerProfile = async (req, res) => {
   const userId = req.user.userId;
 
   try {
     console.log('📝 Updating manpower profile for user:', userId);
+    console.log('📦 Body:', req.body);
+    console.log('📎 Files:', req.files);
 
     const {
-      firstName,
-      lastName,
       jobTitle,
       availabilityStatus,
       availableFrom,
-      location,
       rate,
-      mobileNumber,
-      whatsappNumber,
       profileDescription
     } = req.body;
 
@@ -349,123 +501,105 @@ const updateManpowerProfile = async (req, res) => {
     if (currentProfile.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Profile not found'
+        message: 'Manpower profile not found'
       });
     }
 
     const current = currentProfile[0];
 
-    // Handle profile photo update
-    let profilePhotoUrl = current.profile_photo;
-    if (req.files && req.files.profilePhoto && req.files.profilePhoto[0]) {
-      try {
-        console.log('📸 Uploading new profile photo...');
-        
-        // Delete old photo from Cloudinary if exists
-        if (current.profile_photo) {
-          const matches = current.profile_photo.match(/\/both_profiles\/([^\.]+)/);
-          if (matches && matches[1]) {
-            const publicId = `both_profiles/${matches[1]}`;
-            await cloudinary.uploader.destroy(publicId);
-          }
-        }
-        
-        profilePhotoUrl = await uploadToCloudinary(req.files.profilePhoto[0].path);
-        console.log('✅ New profile photo uploaded:', profilePhotoUrl);
-
-        // Also update equipment_owner_profiles with same photo
-        await db.query(
-          'UPDATE equipment_owner_profiles SET profile_photo = ? WHERE user_id = ?',
-          [profilePhotoUrl, userId]
-        );
-      } catch (error) {
-        console.error('❌ Error updating profile photo:', error);
+    // Handle CV update
+    let cvPath = current.cv_path;
+    if (req.files && req.files.cv && req.files.cv[0]) {
+      console.log('📄 Updating CV...');
+      
+      // Delete old CV
+      if (current.cv_path) {
+        deleteLocalFile(current.cv_path);
       }
+      
+      cvPath = req.files.cv[0].path;
+      console.log('✅ New CV saved:', cvPath);
     }
 
-    // Update manpower profile
+    // Handle certificates update
+    let certificatePaths = [];
+    try {
+      certificatePaths = current.certificates ? JSON.parse(current.certificates) : [];
+    } catch (e) {
+      certificatePaths = [];
+    }
+
+    if (req.files && req.files.certificates && req.files.certificates.length > 0) {
+      console.log('🏆 Adding new certificates...');
+      
+      const newCertificates = req.files.certificates.map(file => file.path);
+      certificatePaths = [...certificatePaths, ...newCertificates];
+      
+      console.log('✅ Total certificates:', certificatePaths.length);
+    }
+
+    // Update ONLY manpower_profiles table
     await db.query(
       `UPDATE manpower_profiles 
-       SET first_name = ?, last_name = ?, job_title = ?, availability_status = ?,
-           available_from = ?, location = ?, rate = ?, mobile_number = ?,
-           whatsapp_number = ?, profile_description = ?, profile_photo = ?,
-           updated_at = NOW()
+       SET job_title = ?, availability_status = ?, available_from = ?,
+           rate = ?, profile_description = ?, cv_path = ?, 
+           certificates = ?, updated_at = NOW()
        WHERE user_id = ?`,
       [
-        firstName || current.first_name,
-        lastName || current.last_name,
         jobTitle || current.job_title,
         availabilityStatus || current.availability_status,
         availableFrom || current.available_from,
-        location || current.location,
         rate || current.rate,
-        mobileNumber || current.mobile_number,
-        whatsappNumber || current.whatsapp_number,
         profileDescription !== undefined ? profileDescription : current.profile_description,
-        profilePhotoUrl,
+        cvPath,
+        JSON.stringify(certificatePaths),
         userId
       ]
     );
 
-    // Also update users table and equipment_owner_profiles with basic info
-    await db.query(
-      `UPDATE users 
-       SET first_name = ?, last_name = ?, mobile_number = ?,
-           whatsapp_number = ?, location = ?, updated_at = NOW()
-       WHERE id = ?`,
-      [
-        firstName || current.first_name,
-        lastName || current.last_name,
-        mobileNumber || current.mobile_number,
-        whatsappNumber || current.whatsapp_number,
-        location || current.location,
-        userId
-      ]
-    );
-
-    await db.query(
-      `UPDATE equipment_owner_profiles 
-       SET name = ?, mobile_number = ?, whatsapp_number = ?, location = ?,
-           updated_at = NOW()
-       WHERE user_id = ?`,
-      [
-        `${firstName || current.first_name} ${lastName || current.last_name}`.trim(),
-        mobileNumber || current.mobile_number,
-        whatsappNumber || current.whatsapp_number,
-        location || current.location,
-        userId
-      ]
-    );
-
-    console.log('✅ Profile updated successfully');
+    console.log('✅ Manpower profile updated successfully');
 
     res.status(200).json({
       success: true,
-      message: 'Profile updated successfully'
+      message: 'Professional profile updated successfully'
     });
 
   } catch (error) {
-    console.error('❌ Update profile error:', error);
+    console.error('❌ Update manpower profile error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error updating profile',
+      message: 'Error updating professional profile',
       error: error.message
     });
   }
 };
 
 // ==========================================
-// UPDATE EQUIPMENT OWNER PROFILE (from dashboard)
+// UPDATE EQUIPMENT OWNER PROFILE (Only equipment_owner_profiles table)
 // ==========================================
 const updateEquipmentProfile = async (req, res) => {
   const userId = req.user.userId;
 
   try {
     console.log('📝 Updating equipment owner profile for user:', userId);
+    console.log('📦 Body:', req.body);
 
     const { companyName } = req.body;
 
-    // Update equipment_owner_profiles
+    // Get current profile
+    const [currentProfile] = await db.query(
+      'SELECT * FROM equipment_owner_profiles WHERE user_id = ?',
+      [userId]
+    );
+
+    if (currentProfile.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Equipment owner profile not found'
+      });
+    }
+
+    // Update ONLY equipment_owner_profiles table
     await db.query(
       `UPDATE equipment_owner_profiles 
        SET company_name = ?, updated_at = NOW()
@@ -493,6 +627,7 @@ const updateEquipmentProfile = async (req, res) => {
 module.exports = {
   createBothAccount,
   getBothProfiles,
+  updateBasicInfo,
   updateManpowerProfile,
   updateEquipmentProfile
 };
