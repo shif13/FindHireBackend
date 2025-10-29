@@ -34,7 +34,7 @@ const app = express();
 // CORS Configuration - FIXED
 // ==========================================
 const corsOptions = {
-  origin: 'https://findhiref.netlify.app',
+  origin: 'https://findhirer.netlify.app',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
