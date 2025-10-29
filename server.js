@@ -30,21 +30,23 @@ const { createReviewsTable } = require("./controllers/reviewController");
 // Initialize express app
 const app = express();
 
-// CORS Configuration - Only Netlify
-app.use(cors({
+// ==========================================
+// CORS Configuration - FIXED
+// ==========================================
+const corsOptions = {
   origin: 'https://findhiref.netlify.app',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Content-Range', 'X-Content-Range']
-}));
+};
 
-// Handle preflight requests
-app.options('*', cors());
+app.use(cors(corsOptions));
 
-// Handle preflight requests
-app.options('*', cors());
+// Handle preflight requests explicitly with same options
+app.options('*', cors(corsOptions));
 
+// Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -135,7 +137,6 @@ if (USE_HTTPS) {
       cert: fs.readFileSync(sslCertPath)
     };
 
-    // ⭐ FIXED: Added '0.0.0.0' to listen on all network interfaces
     https.createServer(httpsOptions, app).listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 HTTPS Server running on port ${PORT}`);
       console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
@@ -150,12 +151,12 @@ if (USE_HTTPS) {
     process.exit(1);
   }
 } else {
-  // HTTP Server (Development)
+  // HTTP Server
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 HTTP Server running on port ${PORT}`);
     console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
     console.log(`📋 API Base: http://122.165.58.206:${PORT}/api`);
-    console.log(`⚠️  WARNING: HTTP mode - CORS issues with HTTPS frontend!`);
+    console.log(`✅ CORS configured for: https://findhiref.netlify.app`);
     console.log(`🌐 Listening on all network interfaces (0.0.0.0)`);
   });
 }
