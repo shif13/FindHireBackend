@@ -30,31 +30,17 @@ const { createReviewsTable } = require("./controllers/reviewController");
 // Initialize express app
 const app = express();
 
-// CORS Configuration - FIXED for Netlify
+// CORS Configuration - Only Netlify
 app.use(cors({
-  origin: function(origin, callback) {
-    const allowedOrigins = [
-      'https://findhiref.netlify.app',
-      'http://localhost:5173',
-      'http://localhost:3000'
-    ];
-    
-    // Allow requests with no origin (Postman, mobile apps, etc.)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.log('❌ Blocked by CORS:', origin);
-      callback(null, false);
-    }
-  },
+  origin: 'https://findhiref.netlify.app',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 86400 // 24 hours
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 // Handle preflight requests
 app.options('*', cors());
@@ -149,12 +135,14 @@ if (USE_HTTPS) {
       cert: fs.readFileSync(sslCertPath)
     };
 
-    https.createServer(httpsOptions, app).listen(PORT, () => {
+    // ⭐ FIXED: Added '0.0.0.0' to listen on all network interfaces
+    https.createServer(httpsOptions, app).listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 HTTPS Server running on port ${PORT}`);
       console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
       console.log(`📋 API Base: https://122.165.58.206:${PORT}/api`);
       console.log(`✅ SSL Certificate loaded successfully`);
       console.log(`⚠️  Users will see a certificate warning (self-signed)`);
+      console.log(`🌐 Listening on all network interfaces (0.0.0.0)`);
     });
   } else {
     console.error('❌ SSL certificates not found!');
@@ -163,10 +151,11 @@ if (USE_HTTPS) {
   }
 } else {
   // HTTP Server (Development)
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 HTTP Server running on port ${PORT}`);
     console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
     console.log(`📋 API Base: http://122.165.58.206:${PORT}/api`);
     console.log(`⚠️  WARNING: HTTP mode - CORS issues with HTTPS frontend!`);
+    console.log(`🌐 Listening on all network interfaces (0.0.0.0)`);
   });
 }
