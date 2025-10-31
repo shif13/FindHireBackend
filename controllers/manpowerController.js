@@ -2,6 +2,7 @@ const db = require('../config/db');
 const bcrypt = require('bcrypt');
 const cloudinary = require('../config/cloudinary');
 const fs = require('fs');
+const path = require('path'); // Add this import
 const { createUser, checkEmailExists } = require('./userController');
 const emailService = require('../services/emailService');
 
@@ -94,12 +95,17 @@ const deleteFromCloudinary = async (imageUrl) => {
   }
 };
 
-// Helper function to delete local files
-const deleteLocalFile = (filePath) => {
+// Helper function to delete local files - Updated
+const deleteLocalFile = (filename) => {
   try {
-    if (filePath && fs.existsSync(filePath)) {
+    if (!filename) return;
+    
+    const uploadsDir = path.join(__dirname, '..', 'uploads');
+    const filePath = path.join(uploadsDir, filename);
+    
+    if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      console.log('🗑️ Deleted local file:', filePath);
+      console.log('🗑️ Deleted local file:', filename);
     }
   } catch (error) {
     console.error('Error deleting local file:', error);
@@ -167,32 +173,39 @@ const createManpowerAccount = async (req, res) => {
 
     // Handle profile photo upload to Cloudinary
     let profilePhotoUrl = null;
-    if (req.files && req.files.profilePhoto && req.files.profilePhoto[0]) {
-      try {
-        console.log('📸 Uploading profile photo to Cloudinary...');
-        profilePhotoUrl = await uploadToCloudinary(req.files.profilePhoto[0].path);
-        console.log('✅ Profile photo uploaded:', profilePhotoUrl);
-      } catch (error) {
-        console.error('❌ Cloudinary upload error:', error);
-        return res.status(500).json({
-          success: false,
-          message: 'Error uploading profile photo'
-        });
+    if (req.files) {
+      const photoFile = req.files.find(f => f.fieldname === 'profilePhoto');
+      if (photoFile) {
+        try {
+          console.log('📸 Uploading profile photo to Cloudinary...');
+          profilePhotoUrl = await uploadToCloudinary(photoFile.path);
+          console.log('✅ Profile photo uploaded:', profilePhotoUrl);
+        } catch (error) {
+          console.error('❌ Cloudinary upload error:', error);
+        }
       }
     }
 
-    // Handle CV upload (stored locally)
+    // Handle CV upload (stored locally) - Store only filename
     let cvPath = null;
-    if (req.files && req.files.cv && req.files.cv[0]) {
-      cvPath = req.files.cv[0].path;
-      console.log('📄 CV saved at:', cvPath);
+    if (req.files) {
+      const cvFile = req.files.find(f => f.fieldname === 'cv');
+      if (cvFile) {
+        // Store only the filename, not the full path
+        cvPath = cvFile.filename;
+        console.log('📄 CV saved:', cvPath);
+      }
     }
 
-    // Handle certificates upload (stored locally)
+    // Handle certificates upload (stored locally) - Store only filenames
     let certificatePaths = [];
-    if (req.files && req.files.certificates) {
-      certificatePaths = req.files.certificates.map(file => file.path);
-      console.log('🏆 Certificates saved:', certificatePaths.length, 'files');
+    if (req.files) {
+      const certFiles = req.files.filter(f => f.fieldname === 'certificates');
+      if (certFiles.length > 0) {
+        // Store only filenames, not full paths
+        certificatePaths = certFiles.map(file => file.filename);
+        console.log('🏆 Certificates saved:', certificatePaths.length, 'files');
+      }
     }
 
     // Auto-fill WhatsApp with mobile if not provided
@@ -245,16 +258,16 @@ const createManpowerAccount = async (req, res) => {
 
     // Send welcome email
     try {
-  await emailService.sendWelcomeEmail({
-    email,
-    firstName,
-    lastName,
-    userType: 'manpower'
-  });
-  console.log('✅ Welcome email sent to:', email);
-} catch (emailError) {
-  console.error('⚠️ Welcome email failed:', emailError.message);
-}
+      await emailService.sendWelcomeEmail({
+        email,
+        firstName,
+        lastName,
+        userType: 'manpower'
+      });
+      console.log('✅ Welcome email sent to:', email);
+    } catch (emailError) {
+      console.error('⚠️ Welcome email failed:', emailError.message);
+    }
 
     res.status(201).json({
       success: true,
@@ -272,11 +285,12 @@ const createManpowerAccount = async (req, res) => {
   }
 };
 
-// Get Manpower Profile
 const getProfile = async (req, res) => {
   const userId = req.user.userId;
 
   try {
+    console.log('🔍 Fetching profile for user ID:', userId);
+
     const [profiles] = await db.query(
       `SELECT mp.*, u.is_active, u.email_verified, u.created_at as account_created
        FROM manpower_profiles mp
@@ -294,22 +308,43 @@ const getProfile = async (req, res) => {
 
     const profile = profiles[0];
     
-    // Parse certificates JSON
+    // Parse certificates JSON safely
+    let parsedCertificates = [];
     if (profile.certificates) {
       try {
-        profile.certificates = JSON.parse(profile.certificates);
+        if (typeof profile.certificates === 'string') {
+          parsedCertificates = JSON.parse(profile.certificates);
+        } else if (Array.isArray(profile.certificates)) {
+          parsedCertificates = profile.certificates;
+        } else if (Buffer.isBuffer(profile.certificates)) {
+          parsedCertificates = JSON.parse(profile.certificates.toString('utf8'));
+        }
       } catch (e) {
-        profile.certificates = [];
+        console.error('Error parsing certificates:', e);
+        parsedCertificates = [];
       }
     }
+    
+    // Convert filenames to full URLs (only if they're not already URLs)
+    // The cv_path and certificates should only contain filenames now
+    profile.certificates = parsedCertificates;
+
+    console.log('✅ Profile data prepared:', {
+      user_id: profile.user_id,
+      name: `${profile.first_name} ${profile.last_name}`,
+      has_photo: !!profile.profile_photo,
+      has_cv: !!profile.cv_path,
+      cv_filename: profile.cv_path,
+      certificates_count: parsedCertificates.length
+    });
 
     res.status(200).json({
       success: true,
-      profile
+      profile: profile
     });
 
   } catch (error) {
-    console.error('Get profile error:', error);
+    console.error('❌ Get profile error:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching profile',
@@ -318,7 +353,7 @@ const getProfile = async (req, res) => {
   }
 };
 
-// Update Manpower Profile
+// Update Manpower Profile - ENHANCED VERSION
 const updateProfile = async (req, res) => {
   const userId = req.user.userId;
 
@@ -337,7 +372,10 @@ const updateProfile = async (req, res) => {
       rate,
       mobileNumber,
       whatsappNumber,
-      profileDescription
+      profileDescription,
+      removePhoto,
+      removeCv,
+      deleteCertificates
     } = req.body;
 
     // Get current profile
@@ -355,40 +393,62 @@ const updateProfile = async (req, res) => {
 
     const current = currentProfile[0];
 
-    // Handle profile photo update
+    // Handle profile photo update/removal
     let profilePhotoUrl = current.profile_photo;
-    if (req.files && req.files.profilePhoto && req.files.profilePhoto[0]) {
-      try {
-        console.log('📸 Uploading new profile photo...');
-        
-        // Delete old photo from Cloudinary
-        if (current.profile_photo) {
-          await deleteFromCloudinary(current.profile_photo);
+    
+    if (removePhoto === 'true') {
+      // Remove photo
+      if (current.profile_photo) {
+        await deleteFromCloudinary(current.profile_photo);
+      }
+      profilePhotoUrl = null;
+      console.log('🗑️ Profile photo removed');
+    } else if (req.files) {
+      const photoFile = req.files.find(f => f.fieldname === 'profilePhoto');
+      if (photoFile) {
+        try {
+          console.log('📸 Uploading new profile photo...');
+          
+          // Delete old photo from Cloudinary
+          if (current.profile_photo) {
+            await deleteFromCloudinary(current.profile_photo);
+          }
+          
+          // Upload new photo
+          profilePhotoUrl = await uploadToCloudinary(photoFile.path);
+          console.log('✅ New profile photo uploaded:', profilePhotoUrl);
+        } catch (error) {
+          console.error('❌ Error updating profile photo:', error);
         }
-        
-        // Upload new photo
-        profilePhotoUrl = await uploadToCloudinary(req.files.profilePhoto[0].path);
-        console.log('✅ New profile photo uploaded:', profilePhotoUrl);
-      } catch (error) {
-        console.error('❌ Error updating profile photo:', error);
       }
     }
 
-    // Handle CV update
+    // Handle CV update/removal
     let cvPath = current.cv_path;
-    if (req.files && req.files.cv && req.files.cv[0]) {
-      console.log('📄 Updating CV...');
-      
-      // Delete old CV
+    
+    if (removeCv === 'true') {
+      // Remove CV
       if (current.cv_path) {
         deleteLocalFile(current.cv_path);
       }
-      
-      cvPath = req.files.cv[0].path;
-      console.log('✅ New CV saved:', cvPath);
+      cvPath = null;
+      console.log('🗑️ CV removed');
+    } else if (req.files) {
+      const cvFile = req.files.find(f => f.fieldname === 'cv');
+      if (cvFile) {
+        console.log('📄 Updating CV...');
+        
+        // Delete old CV
+        if (current.cv_path) {
+          deleteLocalFile(current.cv_path);
+        }
+        
+        cvPath = cvFile.filename; // Store only filename
+        console.log('✅ New CV saved:', cvPath);
+      }
     }
 
-    // Handle certificates update
+    // Handle certificates update and deletion
     let certificatePaths = [];
     try {
       certificatePaths = current.certificates ? JSON.parse(current.certificates) : [];
@@ -396,13 +456,35 @@ const updateProfile = async (req, res) => {
       certificatePaths = [];
     }
 
-    if (req.files && req.files.certificates && req.files.certificates.length > 0) {
-      console.log('🏆 Adding new certificates...');
-      
-      const newCertificates = req.files.certificates.map(file => file.path);
-      certificatePaths = [...certificatePaths, ...newCertificates];
-      
-      console.log('✅ Total certificates:', certificatePaths.length);
+    // Delete marked certificates
+    if (deleteCertificates) {
+      try {
+        const certsToDelete = JSON.parse(deleteCertificates);
+        console.log('🗑️ Deleting certificates:', certsToDelete);
+        
+        certsToDelete.forEach(certPath => {
+          deleteLocalFile(certPath);
+        });
+        
+        // Remove from array
+        certificatePaths = certificatePaths.filter(cert => !certsToDelete.includes(cert));
+        console.log('✅ Certificates deleted, remaining:', certificatePaths.length);
+      } catch (e) {
+        console.error('Error processing certificate deletions:', e);
+      }
+    }
+
+    // Add new certificates
+    if (req.files) {
+      const certFiles = req.files.filter(f => f.fieldname === 'certificates');
+      if (certFiles.length > 0) {
+        console.log('🏆 Adding new certificates...');
+        
+        const newCertificates = certFiles.map(file => file.filename); // Store only filenames
+        certificatePaths = [...certificatePaths, ...newCertificates];
+        
+        console.log('✅ Total certificates:', certificatePaths.length);
+      }
     }
 
     // Update manpower profile

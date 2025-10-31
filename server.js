@@ -21,29 +21,47 @@ const manpowerRoutes = require('./routes/manpowerRoutes');
 const equipmentRoutes = require('./routes/equipmentRoutes'); 
 const manpowerSearchRoutes = require('./routes/manpowerSearchRoutes');
 const equipmentSearchRoutes = require('./routes/equipmentSearchRoutes');
-const reviewRoutes = require('./routes/reviewRoutes');
 const bothRoutes = require('./routes/bothRoutes');
 const inquiryRoutes = require('./routes/inquiryRoutes');
-
-const { createReviewsTable } = require("./controllers/reviewController");
 
 // Initialize express app
 const app = express();
 
 // ==========================================
-// CORS Configuration - FIXED
+// CORS Configuration - FIXED FOR DEVELOPMENT & PRODUCTION
 // ==========================================
 const corsOptions = {
-  origin: 'https://findhirer.netlify.app',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'https://findhirer.netlify.app',
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:5174'
+    ];
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn('⚠️ CORS blocked origin:', origin);
+      // In development, allow all origins
+      callback(null, true); // Change to false in production for security
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
 
-// Handle preflight requests explicitly with same options
+// Handle preflight requests explicitly
 app.options('*', cors(corsOptions));
 
 // Body parsers
@@ -65,14 +83,8 @@ app.use('/api/manpower', manpowerRoutes);
 app.use('/api/equipment', equipmentRoutes);
 app.use('/api/manpower-search', manpowerSearchRoutes);
 app.use('/api/equipment-search', equipmentSearchRoutes);
-app.use('/api/reviews', reviewRoutes);
 app.use('/api/both', bothRoutes);
 app.use('/api/inquiry', inquiryRoutes);
-
-// Initialize reviews table on startup
-createReviewsTable().catch(err => {
-  console.error('❌ Failed to create reviews table:', err);
-});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -142,6 +154,7 @@ if (USE_HTTPS) {
       console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
       console.log(`📋 API Base: https://122.165.58.206:${PORT}/api`);
       console.log(`✅ SSL Certificate loaded successfully`);
+      console.log(`✅ CORS configured for localhost development`);
       console.log(`⚠️  Users will see a certificate warning (self-signed)`);
       console.log(`🌐 Listening on all network interfaces (0.0.0.0)`);
     });
@@ -155,8 +168,8 @@ if (USE_HTTPS) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 HTTP Server running on port ${PORT}`);
     console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
-    console.log(`📋 API Base: http://122.165.58.206:${PORT}/api`);
-    console.log(`✅ CORS configured for: https://findhiref.netlify.app`);
+    console.log(`📋 API Base: http://localhost:${PORT}/api`);
+    console.log(`✅ CORS configured for localhost development`);
     console.log(`🌐 Listening on all network interfaces (0.0.0.0)`);
   });
 }
